@@ -16,6 +16,7 @@ jobs:
         with:
           node-version: 18
       - run: npm ci
+      - run: npm install -g @vscode/vsce
       - run: vsce package --out=edolview.vsix
       - name: Upload release
         uses: "marvinpinto/action-automatic-releases@latest"
