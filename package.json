@@ -3,6 +3,7 @@
   "displayName": "edolview",
   "description": "vscode extension for edolview",
   "version": "0.0.1",
+  "publisher": "edolview-vscode",
   "repository": "https://github.com/edoli/edolview",
   "engines": {
     "vscode": "^1.80.0"
