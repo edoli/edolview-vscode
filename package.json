@@ -2,6 +2,7 @@
   "name": "edolview",
   "displayName": "edolview",
   "description": "vscode extension for edolview",
+  "icon": "icon.png",
   "version": "0.0.1",
   "publisher": "edolview-vscode",
   "repository": "https://github.com/edoli/edolview",
