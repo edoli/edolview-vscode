@@ -61,7 +61,6 @@ class CvVariable {
     }
 
     async readData(session: vscode.DebugSession): Promise<Buffer> {
-        
         const response = await session.customRequest('readMemory', {memoryReference: this.datastart, offset: 0, count: this.nbytes});
         const data: string = response.data;
         const buf = Buffer.from(data, 'base64');

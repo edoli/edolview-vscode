@@ -1,5 +1,4 @@
-
-const pythonCode = `
+/* Original python code
 import socket
 import json
 from struct import pack
@@ -8,7 +7,7 @@ import numpy as np
 import zlib
 
 class EdolView:
-    def __init__(self, host='127.0.0.1', port=21734):
+    def __init__(self, host, port):
         self.host = host
         self.port = port
 
@@ -84,6 +83,40 @@ class EdolView:
             s.send(extra_bytes)
             s.sendall(buf_bytes)
             s.close()
+*/
+
+const pythonCode = `
+L=Exception
+I=hasattr
+H=type
+E=len
+import socket as F,json
+from struct import pack as G
+import importlib.util,numpy as D,zlib
+class EdolView:
+	def __init__(A,host,port):A.host=host;A.port=port
+	def send_image(M,name,image,extra={}):
+		Q='utf-8';P='compression';K='!i';C=extra;A=image
+		if H(A)!=D.ndarray:
+			R=importlib.util.find_spec('torch')
+			if R is not None:
+				import torch
+				if H(A)==torch.Tensor:
+					if I(A,'detach'):A=A.detach()
+					if I(A,'cpu'):A=A.cpu()
+					if I(A,'numpy'):A=A.numpy()
+		if H(A)!=D.ndarray:raise L('image should be np.ndarray')
+		S=A.shape;T=A.dtype
+		if E(A.shape)==4:A=A[0,...]
+		if A.shape[-1]>4:A=A.transpose(1,2,0)
+		if A.shape[-1]>4:raise L('image dimension not valid shape: '+str(S))
+		U=importlib.util.find_spec('cv2')
+		if D.issubdtype(T,D.integer)and U is not None:import cv2;X,V=cv2.imencode('.png',A[:,:,::-1]);J=V.tobytes();C[P]='png'
+		else:
+			if not A.data.c_contiguous:A=A.copy()
+			J=zlib.compress(A.data);C[P]='zlib'
+		C['nbytes']=A.nbytes;C['shape']=A.shape;C['dtype']=A.dtype.name;W=json.dumps(C);N=name.encode(Q);O=W.encode(Q)
+		with F.socket(F.AF_INET,F.SOCK_STREAM)as B:B.connect((M.host,M.port));B.send(G(K,E(N)));B.send(G(K,E(O)));B.send(G(K,E(J)));B.send(N);B.send(O);B.sendall(J);B.close()
 `;
 
 const pythonCodeBuilder = (evaluateName: string, host: string, port: number) => {

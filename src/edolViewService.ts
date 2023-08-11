@@ -12,22 +12,16 @@ export class EdolViewImageHandler{
 
     constructor() {
     }
-    async addImageFile(filePath: string) {
+
+    async sendData(name: string, extra: string, data: Buffer) {
 
         const host: string = vscode.workspace.getConfiguration().get("edolview.host") ?? "127.0.0.1";
         const port: number = vscode.workspace.getConfiguration().get("edolview.port") ?? 21734;
-
-        const data = await fs.readFile(filePath);
 
         const netSocket = new net.Socket();
         
         const socket = new PromiseSocket(netSocket);
         await socket.connectPromise(port, host);
-
-        const name = path.basename(filePath);
-        const extra = JSON.stringify({
-            compression: 'cv'
-        });
 
         const lengthBuffer = await Buffer.allocUnsafe(12);
         let offset = 0;
@@ -42,6 +36,19 @@ export class EdolViewImageHandler{
         await socket.writeBuffer(data);
 
         await socket.end();
+
+    }
+
+    async addImageFile(filePath: string) {
+
+        const data = await fs.readFile(filePath);
+
+        const name = path.basename(filePath);
+        const extra = JSON.stringify({
+            compression: 'cv'
+        });
+
+        await this.sendData(name, extra, data);
     }
 
     async addImagePython(variable: Variable) {
@@ -95,17 +102,12 @@ export class EdolViewImageHandler{
                 const buf = await cvVariable.readData(session);
             
                 const compressedBuf = zlib.deflateSync(buf);
-            
-                const host: string = vscode.workspace.getConfiguration().get("edolview.host") ?? "127.0.0.1";
-                const port: number = vscode.workspace.getConfiguration().get("edolview.port") ?? 21734;
-    
-                const socket = net.connect({
-                    host: host,
-                    port: port
+                
+                const extra = JSON.stringify({
+                    compression: 'zlib'
                 });
                 
-                socket.write('');
-                // TODO
+                await this.sendData(varName, extra, compressedBuf);
             }
         }
     }
