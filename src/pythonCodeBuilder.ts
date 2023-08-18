@@ -11,7 +11,7 @@ class EdolView:
         self.host = host
         self.port = port
 
-    def send_image(self, name:str, image, extra={}):
+    def send_image(self, name:str, image, float_to_half, extra={}):
         # convert torch to numpy array
         if type(image) != np.ndarray:
             torch_spec = importlib.util.find_spec('torch')
@@ -36,7 +36,7 @@ class EdolView:
         dtype = image.dtype
         
         # Try to convert (B, C, H, W) or (C, H, W) to (H, W, C)
-        if len(image.shape) == 4:
+        while len(image.shape) > 3:
             image = image[0, ...]
 
         if image.shape[-1] > 4:
@@ -45,7 +45,7 @@ class EdolView:
         if image.shape[-1] > 4:
             raise Exception('image dimension not valid shape: ' + str(initial_shape))
 
-        # Convert to PNG if cv2 is  installed and image is integer. Otherwise use zlib compress
+        # Convert to PNG if cv2 is installed and image is integer. Otherwise use zlib compress
         cv2_spec = importlib.util.find_spec('cv2')
             
         if np.issubdtype(dtype, np.integer) and cv2_spec is not None:
@@ -56,6 +56,9 @@ class EdolView:
 
             extra['compression'] = 'png'
         else:
+            if (image.dtype == np.float32 or image.dtype == np.float64) and float_to_half:
+                image = image.astype(np.float16)
+
             if not image.data.c_contiguous:
                 image = image.copy()
 
@@ -92,12 +95,12 @@ H=type
 E=len
 import socket as F,json
 from struct import pack as G
-import importlib.util,numpy as D,zlib
+import importlib.util,numpy as C,zlib
 class EdolView:
 	def __init__(A,host,port):A.host=host;A.port=port
-	def send_image(M,name,image,extra={}):
-		Q='utf-8';P='compression';K='!i';C=extra;A=image
-		if H(A)!=D.ndarray:
+	def send_image(M,name,image,float_to_half,extra={}):
+		Q='utf-8';P='compression';K='!i';D=extra;A=image
+		if H(A)!=C.ndarray:
 			R=importlib.util.find_spec('torch')
 			if R is not None:
 				import torch
@@ -105,26 +108,29 @@ class EdolView:
 					if I(A,'detach'):A=A.detach()
 					if I(A,'cpu'):A=A.cpu()
 					if I(A,'numpy'):A=A.numpy()
-		if H(A)!=D.ndarray:raise L('image should be np.ndarray')
+		if H(A)!=C.ndarray:raise L('image should be np.ndarray')
 		S=A.shape;T=A.dtype
-		if E(A.shape)==4:A=A[0,...]
+		while E(A.shape)>3:A=A[0,...]
 		if A.shape[-1]>4:A=A.transpose(1,2,0)
 		if A.shape[-1]>4:raise L('image dimension not valid shape: '+str(S))
 		U=importlib.util.find_spec('cv2')
-		if D.issubdtype(T,D.integer)and U is not None:import cv2;X,V=cv2.imencode('.png',A[:,:,::-1]);J=V.tobytes();C[P]='png'
+		if C.issubdtype(T,C.integer)and U is not None:import cv2;X,V=cv2.imencode('.png',A[:,:,::-1]);J=V.tobytes();D[P]='png'
 		else:
+			if(A.dtype==C.float32 or A.dtype==C.float64)and float_to_half:A=A.astype(C.float16)
 			if not A.data.c_contiguous:A=A.copy()
-			J=zlib.compress(A.data);C[P]='zlib'
-		C['nbytes']=A.nbytes;C['shape']=A.shape;C['dtype']=A.dtype.name;W=json.dumps(C);N=name.encode(Q);O=W.encode(Q)
+			J=zlib.compress(A.data);D[P]='zlib'
+		D['nbytes']=A.nbytes;D['shape']=A.shape;D['dtype']=A.dtype.name;W=json.dumps(D);N=name.encode(Q);O=W.encode(Q)
 		with F.socket(F.AF_INET,F.SOCK_STREAM)as B:B.connect((M.host,M.port));B.send(G(K,E(N)));B.send(G(K,E(O)));B.send(G(K,E(J)));B.send(N);B.send(O);B.sendall(J);B.close()
 `;
 
-const pythonCodeBuilder = (evaluateName: string, host: string, port: number) => {
+const pythonCodeBuilder = (evaluateName: string, host: string, port: number, floatToHalf: boolean) => {
     const evaluateNameEscape = evaluateName.replaceAll('\'', '\\\'').replaceAll('\"', '\\\"');
+    const floatToHalfStr = floatToHalf ? "True" : "False";
+
     return `
 ${pythonCode}
 
-EdolView(host='${host}', port=${port}).send_image('${evaluateNameEscape}', ${evaluateName})
+EdolView(host='${host}', port=${port}).send_image('${evaluateNameEscape}', ${evaluateName}, ${floatToHalfStr})
     `;
 };
 

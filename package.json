@@ -3,7 +3,7 @@
   "displayName": "edolview",
   "description": "vscode extension for edolview",
   "icon": "icon.png",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "edolview-vscode",
   "repository": "https://github.com/edoli/edolview",
   "engines": {
@@ -43,6 +43,11 @@
           "type": "number",
           "default": 21734,
           "description": "Port number of Edolview"
+        },
+        "edolview.float_to_half": {
+          "type": "boolean",
+          "default": false,
+          "description": "Convert float array to half (faster transmit speed, but loss information)"
         }
       }
     },
