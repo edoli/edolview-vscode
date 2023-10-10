@@ -39,6 +39,9 @@ class EdolView:
         while len(image.shape) > 3:
             image = image[0, ...]
 
+        if len(image.shape) == 2:
+            image = image[None, ...]
+
         if image.shape[-1] > 4:
             image = image.transpose(1, 2, 0)        
             
@@ -89,7 +92,7 @@ class EdolView:
 */
 
 const pythonCode = `
-L=Exception
+M=Exception
 I=hasattr
 H=type
 E=len
@@ -98,29 +101,30 @@ from struct import pack as G
 import importlib.util,numpy as C,zlib
 class EdolView:
 	def __init__(A,host,port):A.host=host;A.port=port
-	def send_image(M,name,image,float_to_half,extra={}):
-		Q='utf-8';P='compression';K='!i';D=extra;A=image
+	def send_image(N,name,image,float_to_half,extra={}):
+		R='utf-8';Q='compression';L='!i';K=None;D=extra;A=image
 		if H(A)!=C.ndarray:
-			R=importlib.util.find_spec('torch')
-			if R is not None:
+			S=importlib.util.find_spec('torch')
+			if S is not K:
 				import torch
 				if H(A)==torch.Tensor:
 					if I(A,'detach'):A=A.detach()
 					if I(A,'cpu'):A=A.cpu()
 					if I(A,'numpy'):A=A.numpy()
-		if H(A)!=C.ndarray:raise L('image should be np.ndarray')
-		S=A.shape;T=A.dtype
+		if H(A)!=C.ndarray:raise M('image should be np.ndarray')
+		T=A.shape;U=A.dtype
 		while E(A.shape)>3:A=A[0,...]
+		if E(A.shape)==2:A=A[K,...]
 		if A.shape[-1]>4:A=A.transpose(1,2,0)
-		if A.shape[-1]>4:raise L('image dimension not valid shape: '+str(S))
-		U=importlib.util.find_spec('cv2')
-		if C.issubdtype(T,C.integer)and U is not None:import cv2;X,V=cv2.imencode('.png',A[:,:,::-1]);J=V.tobytes();D[P]='png'
+		if A.shape[-1]>4:raise M('image dimension not valid shape: '+str(T))
+		V=importlib.util.find_spec('cv2')
+		if C.issubdtype(U,C.integer)and V is not K:import cv2;Y,W=cv2.imencode('.png',A[:,:,::-1]);J=W.tobytes();D[Q]='png'
 		else:
 			if(A.dtype==C.float32 or A.dtype==C.float64)and float_to_half:A=A.astype(C.float16)
 			if not A.data.c_contiguous:A=A.copy()
-			J=zlib.compress(A.data);D[P]='zlib'
-		D['nbytes']=A.nbytes;D['shape']=A.shape;D['dtype']=A.dtype.name;W=json.dumps(D);N=name.encode(Q);O=W.encode(Q)
-		with F.socket(F.AF_INET,F.SOCK_STREAM)as B:B.connect((M.host,M.port));B.send(G(K,E(N)));B.send(G(K,E(O)));B.send(G(K,E(J)));B.send(N);B.send(O);B.sendall(J);B.close()
+			J=zlib.compress(A.data);D[Q]='zlib'
+		D['nbytes']=A.nbytes;D['shape']=A.shape;D['dtype']=A.dtype.name;X=json.dumps(D);O=name.encode(R);P=X.encode(R)
+		with F.socket(F.AF_INET,F.SOCK_STREAM)as B:B.connect((N.host,N.port));B.send(G(L,E(O)));B.send(G(L,E(P)));B.send(G(L,E(J)));B.send(O);B.send(P);B.sendall(J);B.close()
 `;
 
 const pythonCodeBuilder = (evaluateName: string, host: string, port: number, floatToHalf: boolean) => {
