@@ -6,12 +6,29 @@ import importlib.util
 import numpy as np
 import zlib
 
+def area_interpolate(im, scale):
+    new_h = im.shape[0] // scale
+    new_w = im.shape[1] // scale
+
+    clip_h = new_h * scale
+    clip_w = new_w * scale
+
+    buf = np.zeros((new_h, new_w, im.shape[2]), dtype=np.float32)
+
+    for i in range(scale):
+        for j in range(scale):
+            buf += im[i:clip_h:scale, j:clip_w:scale]
+
+    buf = (buf / (scale * scale)).astype(im.dtype)
+
+    return buf
+
 class EdolView:
     def __init__(self, host, port):
         self.host = host
         self.port = port
 
-    def send_image(self, name:str, image, float_to_half, extra={}):
+    def send_image(self, name:str, image, float_to_half, downscale_factor=1, extra={}):
         # convert torch to numpy array
         if type(image) != np.ndarray:
             torch_spec = importlib.util.find_spec('torch')
@@ -47,6 +64,9 @@ class EdolView:
             
         if image.shape[-1] > 4:
             raise Exception('image dimension not valid shape: ' + str(initial_shape))
+
+        if downscale_factor != 1:
+            image = area_interpolate(image, downscale_factor)
 
         # Convert to PNG if cv2 is installed and image is integer. Otherwise use zlib compress
         cv2_spec = importlib.util.find_spec('cv2')
@@ -92,49 +112,58 @@ class EdolView:
 */
 
 const pythonCode = `
-M=Exception
+L=Exception
+J=range
 I=hasattr
 H=type
 E=len
 import socket as F,json
 from struct import pack as G
-import importlib.util,numpy as C,zlib
+import importlib.util,numpy as B,zlib
+def K(im,scale):
+	C=im;A=scale;E=C.shape[0]//A;F=C.shape[1]//A;G=E*A;H=F*A;D=B.zeros((E,F,C.shape[2]),dtype=B.float32)
+	for I in J(A):
+		for K in J(A):D+=C[I:G:A,K:H:A]
+	D=(D/(A*A)).astype(C.dtype);return D
 class EdolView:
 	def __init__(A,host,port):A.host=host;A.port=port
-	def send_image(N,name,image,float_to_half,extra={}):
-		R='utf-8';Q='compression';L='!i';K=None;D=extra;A=image
-		if H(A)!=C.ndarray:
-			S=importlib.util.find_spec('torch')
-			if S is not K:
+	def send_image(M,name:str,image,float_to_half,downscale_factor=1,extra={}):
+		N=downscale_factor;D=extra;A=image
+		if H(A)!=B.ndarray:
+			Q=importlib.util.find_spec('torch')
+			if Q is not None:
 				import torch
 				if H(A)==torch.Tensor:
 					if I(A,'detach'):A=A.detach()
 					if I(A,'cpu'):A=A.cpu()
 					if I(A,'numpy'):A=A.numpy()
-		if H(A)!=C.ndarray:raise M('image should be np.ndarray')
-		T=A.shape;U=A.dtype
+		if H(A)!=B.ndarray:raise L('image should be np.ndarray')
+		R=A.shape;S=A.dtype
 		while E(A.shape)>3:A=A[0,...]
-		if E(A.shape)==2:A=A[K,...]
+		if E(A.shape)==2:A=A[None,...]
 		if A.shape[-1]>4:A=A.transpose(1,2,0)
-		if A.shape[-1]>4:raise M('image dimension not valid shape: '+str(T))
-		V=importlib.util.find_spec('cv2')
-		if C.issubdtype(U,C.integer)and V is not K:import cv2;Y,W=cv2.imencode('.png',A[:,:,::-1]);J=W.tobytes();D[Q]='png'
+		if A.shape[-1]>4:raise L('image dimension not valid shape: '+str(R))
+		if N!=1:A=K(A,N)
+		T=importlib.util.find_spec('cv2')
+		if B.issubdtype(S,B.integer)and T is not None:import cv2;W,U=cv2.imencode('.png',A[:,:,::-1]);J=U.tobytes();D['compression']='png'
 		else:
-			if(A.dtype==C.float32 or A.dtype==C.float64)and float_to_half:A=A.astype(C.float16)
+			if(A.dtype==B.float32 or A.dtype==B.float64)and float_to_half:A=A.astype(B.float16)
 			if not A.data.c_contiguous:A=A.copy()
-			J=zlib.compress(A.data);D[Q]='zlib'
-		D['nbytes']=A.nbytes;D['shape']=A.shape;D['dtype']=A.dtype.name;X=json.dumps(D);O=name.encode(R);P=X.encode(R)
-		with F.socket(F.AF_INET,F.SOCK_STREAM)as B:B.connect((N.host,N.port));B.send(G(L,E(O)));B.send(G(L,E(P)));B.send(G(L,E(J)));B.send(O);B.send(P);B.sendall(J);B.close()
+			J=zlib.compress(A.data);D['compression']='zlib'
+		D['nbytes']=A.nbytes;D['shape']=A.shape;D['dtype']=A.dtype.name;V=json.dumps(D);O=name.encode('utf-8');P=V.encode('utf-8')
+		with F.socket(F.AF_INET,F.SOCK_STREAM)as C:C.connect((M.host,M.port));C.send(G('!i',E(O)));C.send(G('!i',E(P)));C.send(G('!i',E(J)));C.send(O);C.send(P);C.sendall(J);C.close()
+
 `;
 
-const pythonCodeBuilder = (evaluateName: string, host: string, port: number, floatToHalf: boolean) => {
+const pythonCodeBuilder = (evaluateName: string, host: string, port: number, floatToHalf: boolean, downscale: number) => {
     const evaluateNameEscape = evaluateName.replaceAll('\'', '\\\'').replaceAll('\"', '\\\"');
     const floatToHalfStr = floatToHalf ? "True" : "False";
+    const downscaleStr = downscale.toString();
 
     return `
 ${pythonCode}
 
-EdolView(host='${host}', port=${port}).send_image('${evaluateNameEscape}', ${evaluateName}, ${floatToHalfStr})
+EdolView(host='${host}', port=${port}).send_image('${evaluateNameEscape}', ${evaluateName}, ${floatToHalfStr}, ${downscaleStr})
     `;
 };
 
