@@ -112,7 +112,7 @@ class EdolView:
 */
 
 const pythonCode = `
-L=Exception
+K=Exception
 J=range
 I=hasattr
 H=type
@@ -120,15 +120,15 @@ E=len
 import socket as F,json
 from struct import pack as G
 import importlib.util,numpy as B,zlib
-def K(im,scale):
+def P(im,scale):
 	C=im;A=scale;E=C.shape[0]//A;F=C.shape[1]//A;G=E*A;H=F*A;D=B.zeros((E,F,C.shape[2]),dtype=B.float32)
 	for I in J(A):
 		for K in J(A):D+=C[I:G:A,K:H:A]
 	D=(D/(A*A)).astype(C.dtype);return D
 class EdolView:
 	def __init__(A,host,port):A.host=host;A.port=port
-	def send_image(M,name:str,image,float_to_half,downscale_factor=1,extra={}):
-		N=downscale_factor;D=extra;A=image
+	def send_image(L,name:str,image,float_to_half,downscale_factor=1,extra={}):
+		M=downscale_factor;D=extra;A=image
 		if H(A)!=B.ndarray:
 			Q=importlib.util.find_spec('torch')
 			if Q is not None:
@@ -137,22 +137,21 @@ class EdolView:
 					if I(A,'detach'):A=A.detach()
 					if I(A,'cpu'):A=A.cpu()
 					if I(A,'numpy'):A=A.numpy()
-		if H(A)!=B.ndarray:raise L('image should be np.ndarray')
+		if H(A)!=B.ndarray:raise K('image should be np.ndarray')
 		R=A.shape;S=A.dtype
 		while E(A.shape)>3:A=A[0,...]
 		if E(A.shape)==2:A=A[None,...]
 		if A.shape[-1]>4:A=A.transpose(1,2,0)
-		if A.shape[-1]>4:raise L('image dimension not valid shape: '+str(R))
-		if N!=1:A=K(A,N)
+		if A.shape[-1]>4:raise K('image dimension not valid shape: '+str(R))
+		if M!=1:A=P(A,M)
 		T=importlib.util.find_spec('cv2')
 		if B.issubdtype(S,B.integer)and T is not None:import cv2;W,U=cv2.imencode('.png',A[:,:,::-1]);J=U.tobytes();D['compression']='png'
 		else:
 			if(A.dtype==B.float32 or A.dtype==B.float64)and float_to_half:A=A.astype(B.float16)
 			if not A.data.c_contiguous:A=A.copy()
 			J=zlib.compress(A.data);D['compression']='zlib'
-		D['nbytes']=A.nbytes;D['shape']=A.shape;D['dtype']=A.dtype.name;V=json.dumps(D);O=name.encode('utf-8');P=V.encode('utf-8')
-		with F.socket(F.AF_INET,F.SOCK_STREAM)as C:C.connect((M.host,M.port));C.send(G('!i',E(O)));C.send(G('!i',E(P)));C.send(G('!i',E(J)));C.send(O);C.send(P);C.sendall(J);C.close()
-
+		D['nbytes']=A.nbytes;D['shape']=A.shape;D['dtype']=A.dtype.name;V=json.dumps(D);N=name.encode('utf-8');O=V.encode('utf-8')
+		with F.socket(F.AF_INET,F.SOCK_STREAM)as C:C.connect((L.host,L.port));C.send(G('!i',E(N)));C.send(G('!i',E(O)));C.send(G('!i',E(J)));C.send(N);C.send(O);C.sendall(J);C.close()
 `;
 
 const pythonCodeBuilder = (evaluateName: string, host: string, port: number, floatToHalf: boolean, downscale: number) => {
