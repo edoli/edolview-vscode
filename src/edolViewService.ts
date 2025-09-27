@@ -65,15 +65,18 @@ export class EdolViewImageHandler{
 
         const extraBuffer = this.serializeExtra(extra);
 
+        const nameBuffer = Buffer.from(name, "utf8");
+        const nameLength = nameBuffer.length;
+
         const lengthBuffer = await Buffer.allocUnsafe(24);
         let offset = 0;
-        offset = lengthBuffer.writeBigUInt64BE(BigInt(name.length), offset);
+        offset = lengthBuffer.writeBigUInt64BE(BigInt(nameLength), offset);
         offset = lengthBuffer.writeBigUInt64BE(BigInt(extraBuffer.length), offset);
         offset = lengthBuffer.writeBigUInt64BE(BigInt(data.length), offset);
 
         await socket.writeBuffer(lengthBuffer);
-        
-        await socket.writeStr(name);
+
+        await socket.writeBuffer(nameBuffer);
         await socket.writeBuffer(extraBuffer);
         await socket.writeBuffer(data);
 
