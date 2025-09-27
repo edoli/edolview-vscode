@@ -129,9 +129,9 @@ class EdolView:
             s.connect((self.host, self.port))
             print(f'sending image {name} to {self.host}:{self.port}, payload={buf_len/1024:.1f} KB, comp={compression}')
 
-            s.sendall(pack('!i', name_len))
-            s.sendall(pack('!i', extra_len))
-            s.sendall(pack('!i', buf_len))
+            s.sendall(pack('!Q', name_len))
+            s.sendall(pack('!Q', extra_len))
+            s.sendall(pack('!Q', buf_len))
             s.sendall(name_bytes)
             s.sendall(extra_bytes)
             s.sendall(buf_bytes)
@@ -141,11 +141,11 @@ class EdolView:
 const pythonCode = `
 N=hasattr
 F=range
-L=len
-K=isinstance
+M=len
+L=isinstance
 G=None
 E=Exception
-import socket as J
+import socket as K
 from struct import pack as D
 import importlib.util,numpy as B,zlib
 def X(im,scale):
@@ -176,16 +176,16 @@ def Z(arr):
 class EdolView:
 	def __init__(A,host,port):A.host=host;A.port=port
 	def send_image(I,name,image,float_to_half,do_compression=False,downscale_factor=1):
-		W='utf-8';V='C_CONTIGUOUS';U='raw';P=downscale_factor;O=do_compression;M='!i';A=image
-		if not K(A,B.ndarray):
+		W='utf-8';V='C_CONTIGUOUS';U='raw';P=downscale_factor;O=do_compression;J='!Q';A=image
+		if not L(A,B.ndarray):
 			a=importlib.util.find_spec('torch')
 			if a is not G:
 				import torch
-				if K(A,torch.Tensor):
+				if L(A,torch.Tensor):
 					if N(A,'detach'):A=A.detach()
 					if N(A,'cpu'):A=A.cpu()
 					A=A.numpy()
-		if not K(A,B.ndarray):raise E('image should be np.ndarray')
+		if not L(A,B.ndarray):raise E('image should be np.ndarray')
 		A=Z(A);b=tuple(A.shape)
 		if P!=1:A=X(A,P)
 		if A.shape[2]>4:raise E('image channel must be <= 4, got shape: '+str(b))
@@ -204,8 +204,8 @@ class EdolView:
 		if F is G:
 			if not A.flags[V]:A=A.copy()
 			F=A.tobytes();H=U
-		f=A.nbytes;g,h,i=A.shape;j=Y(A.dtype);k=H.encode(W);R=b''.join([D('!Q',f),D('!III',g,h,i),D('!I',j),k]);S=name.encode(W);l=L(S);m=L(R);T=L(F)
-		with J.socket(J.AF_INET,J.SOCK_STREAM)as C:C.connect((I.host,I.port));print(f"sending image {name} to {I.host}:{I.port}, payload={T/1024:.1f} KB, comp={H}");C.sendall(D(M,l));C.sendall(D(M,m));C.sendall(D(M,T));C.sendall(S);C.sendall(R);C.sendall(F);C.close()
+		f=A.nbytes;g,h,i=A.shape;j=Y(A.dtype);k=H.encode(W);R=b''.join([D(J,f),D('!III',g,h,i),D('!I',j),k]);S=name.encode(W);l=M(S);m=M(R);T=M(F)
+		with K.socket(K.AF_INET,K.SOCK_STREAM)as C:C.connect((I.host,I.port));print(f"sending image {name} to {I.host}:{I.port}, payload={T/1024:.1f} KB, comp={H}");C.sendall(D(J,l));C.sendall(D(J,m));C.sendall(D(J,T));C.sendall(S);C.sendall(R);C.sendall(F);C.close()
 `;
 
 const pythonCodeBuilder = (evaluateName: string, host: string, port: number, floatToHalf: boolean, doCompression: boolean, downscale: number) => {
