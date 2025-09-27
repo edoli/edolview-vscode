@@ -49,6 +49,11 @@
           "default": false,
           "description": "Convert float array to half (faster transmit speed, but loss information)"
         },
+        "edolview.do_compression": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable compression for transmission (usually faster for remote connection but slower for local connection)"
+        },
         "edolview.downscale": {
           "type": "number",
           "default": 1,

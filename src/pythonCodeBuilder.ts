@@ -1,6 +1,5 @@
 /* Original python code
 import socket
-import json
 from struct import pack
 import importlib.util
 import numpy as np
@@ -9,160 +8,216 @@ import zlib
 def area_interpolate(im, scale):
     new_h = im.shape[0] // scale
     new_w = im.shape[1] // scale
-
     clip_h = new_h * scale
     clip_w = new_w * scale
-
     buf = np.zeros((new_h, new_w, im.shape[2]), dtype=np.float32)
-
     for i in range(scale):
         for j in range(scale):
             buf += im[i:clip_h:scale, j:clip_w:scale]
+    return (buf / (scale * scale)).astype(im.dtype)
 
-    buf = (buf / (scale * scale)).astype(im.dtype)
+def parse_dtype(dtype):
+    if dtype == np.float64: return 6
+    if dtype == np.float32: return 5
+    if dtype == np.float16: return 7
+    if dtype == np.uint16:  return 2
+    if dtype == np.uint8:   return 0
+    if dtype == np.int32:   return 4
+    if dtype == np.int16:   return 3
+    if dtype == np.int8:    return 1
+    raise Exception('dtype not supported: ' + str(dtype))
 
-    return buf
+def to_hwc(arr: np.ndarray) -> np.ndarray:
+    """(B,C,H,W)/(C,H,W)/(H,W) -> (H,W,C)"""
+    a = arr
+
+    # remove leading 1-dims
+    while a.ndim > 3:
+        a = a[0]
+
+    if a.ndim == 2:
+        return a[:, :, None]  # (H,W,1)
+    if a.ndim != 3:
+        raise Exception(f'invalid shape: {arr.shape}')
+
+    H, W, C = a.shape
+    if a.shape[0] in (1, 3, 4) and a.shape[2] not in (1, 3, 4):
+        a = np.transpose(a, (1, 2, 0))
+
+    if a.ndim != 3:
+        raise Exception(f'could not normalize shape to HWC: {arr.shape} -> {a.shape}')
+    return a
 
 class EdolView:
     def __init__(self, host, port):
         self.host = host
         self.port = port
 
-    def send_image(self, name:str, image, float_to_half, downscale_factor=1, extra={}):
-        # convert torch to numpy array
-        if type(image) != np.ndarray:
+    def send_image(self, name: str, image, float_to_half: bool, do_compression: bool = False, downscale_factor: int = 1):
+        # torch -> numpy 변환
+        if not isinstance(image, np.ndarray):
             torch_spec = importlib.util.find_spec('torch')
-
             if torch_spec is not None:
-                import torch
-
-                if type(image) == torch.Tensor:
+                import torch  # noqa
+                if isinstance(image, torch.Tensor):
                     if hasattr(image, 'detach'):
                         image = image.detach()
-
                     if hasattr(image, 'cpu'):
                         image = image.cpu()
-                        
-                    if hasattr(image, 'numpy'):
-                        image = image.numpy()
-                        
-        if type(image) != np.ndarray:
+                    image = image.numpy()
+        if not isinstance(image, np.ndarray):
             raise Exception('image should be np.ndarray')
-        
-        initial_shape = image.shape
-        dtype = image.dtype
-        
-        # Try to convert (B, C, H, W) or (C, H, W) to (H, W, C)
-        while len(image.shape) > 3:
-            image = image[0, ...]
 
-        if len(image.shape) == 2:
-            image = image[None, ...]
-
-        if image.shape[-1] > 4:
-            image = image.transpose(1, 2, 0)        
-            
-        if image.shape[-1] > 4:
-            raise Exception('image dimension not valid shape: ' + str(initial_shape))
+        image = to_hwc(image)
+        initial_shape = tuple(image.shape)
 
         if downscale_factor != 1:
             image = area_interpolate(image, downscale_factor)
 
-        # Convert to PNG if cv2 is installed and image is integer. Otherwise use zlib compress
+        if image.shape[2] > 4:
+            raise Exception('image channel must be <= 4, got shape: ' + str(initial_shape))
+
+        if do_compression and (image.dtype in (np.float32, np.float64)) and float_to_half:
+            image = image.astype(np.float16)
+
         cv2_spec = importlib.util.find_spec('cv2')
-            
-        if np.issubdtype(dtype, np.integer) and cv2_spec is not None:
-            import cv2
+        compression = 'raw'
+        buf_bytes = None
 
-            retval, buf = cv2.imencode('.png', image[:, :, ::-1])
-            buf_bytes = buf.tobytes()
+        if do_compression:
+            if np.issubdtype(image.dtype, np.integer) and cv2_spec is not None:
+                import cv2
+                img_enc = image
+                if image.shape[2] == 3:
+                    img_enc = image[:, :, ::-1]
+                ok, buf = cv2.imencode('.png', img_enc)
+                if not ok:
+                    raise Exception('cv2.imencode(.png) failed')
+                buf_bytes = buf.tobytes()
+                compression = 'png'
+            else:
+                if not image.flags['C_CONTIGUOUS']:
+                    image = image.copy()
+                buf_bytes = zlib.compress(image.tobytes())
+                compression = 'zlib'
 
-            extra['compression'] = 'png'
-        else:
-            if (image.dtype == np.float32 or image.dtype == np.float64) and float_to_half:
-                image = image.astype(np.float16)
-
-            if not image.data.c_contiguous:
+        if buf_bytes is None:
+            if not image.flags['C_CONTIGUOUS']:
                 image = image.copy()
+            buf_bytes = image.tobytes()
+            compression = 'raw'
 
-            buf_bytes = zlib.compress(image.data)
+        nbytes_uncompressed = image.nbytes
+        H, W, C = image.shape
+        dtype_code = parse_dtype(image.dtype)
 
-            extra['compression'] = 'zlib'
+        compression_bytes = compression.encode('utf-8')
+        extra_bytes = b''.join([
+            pack('!Q', nbytes_uncompressed),     # u64
+            pack('!III', H, W, C),               # 3×u32
+            pack('!I', dtype_code),              # u32
+            compression_bytes                    # utf-8
+        ])
 
-        extra['nbytes'] = image.nbytes
-        extra['shape'] = image.shape
-        extra['dtype'] = image.dtype.name
-
-        extra_str = json.dumps(extra)
-
-        # Encode string and send to socket
         name_bytes = name.encode('utf-8')
-        extra_bytes = extra_str.encode('utf-8')
+
+        name_len = len(name_bytes)
+        extra_len = len(extra_bytes)
+        buf_len = len(buf_bytes)
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((self.host, self.port))
+            print(f'sending image {name} to {self.host}:{self.port}, payload={buf_len/1024:.1f} KB, comp={compression}')
 
-            s.send(pack('!i', len(name_bytes)))
-            s.send(pack('!i', len(extra_bytes)))
-            s.send(pack('!i', len(buf_bytes)))
-            s.send(name_bytes)
-            s.send(extra_bytes)
+            s.sendall(pack('!i', name_len))
+            s.sendall(pack('!i', extra_len))
+            s.sendall(pack('!i', buf_len))
+            s.sendall(name_bytes)
+            s.sendall(extra_bytes)
             s.sendall(buf_bytes)
             s.close()
 */
 
 const pythonCode = `
-K=Exception
-J=range
-I=hasattr
-H=type
-E=len
-import socket as F,json
-from struct import pack as G
+N=hasattr
+F=range
+L=len
+K=isinstance
+G=None
+E=Exception
+import socket as J
+from struct import pack as D
 import importlib.util,numpy as B,zlib
-def P(im,scale):
-	C=im;A=scale;E=C.shape[0]//A;F=C.shape[1]//A;G=E*A;H=F*A;D=B.zeros((E,F,C.shape[2]),dtype=B.float32)
-	for I in J(A):
-		for K in J(A):D+=C[I:G:A,K:H:A]
-	D=(D/(A*A)).astype(C.dtype);return D
+def X(im,scale):
+	C=im;A=scale;D=C.shape[0]//A;E=C.shape[1]//A;H=D*A;I=E*A;G=B.zeros((D,E,C.shape[2]),dtype=B.float32)
+	for J in F(A):
+		for K in F(A):G+=C[J:H:A,K:I:A]
+	return(G/(A*A)).astype(C.dtype)
+def Y(dtype):
+	A=dtype
+	if A==B.float64:return 6
+	if A==B.float32:return 5
+	if A==B.float16:return 7
+	if A==B.uint16:return 2
+	if A==B.uint8:return 0
+	if A==B.int32:return 4
+	if A==B.int16:return 3
+	if A==B.int8:return 1
+	raise E('dtype not supported: '+str(A))
+def Z(arr):
+	C=arr;A=C
+	while A.ndim>3:A=A[0]
+	if A.ndim==2:return A[:,:,G]
+	if A.ndim!=3:raise E(f"invalid shape: {C.shape}")
+	D,F,H=A.shape
+	if A.shape[0]in(1,3,4)and A.shape[2]not in(1,3,4):A=B.transpose(A,(1,2,0))
+	if A.ndim!=3:raise E(f"could not normalize shape to HWC: {C.shape} -> {A.shape}")
+	return A
 class EdolView:
 	def __init__(A,host,port):A.host=host;A.port=port
-	def send_image(L,name:str,image,float_to_half,downscale_factor=1,extra={}):
-		M=downscale_factor;D=extra;A=image
-		if H(A)!=B.ndarray:
-			Q=importlib.util.find_spec('torch')
-			if Q is not None:
+	def send_image(I,name,image,float_to_half,do_compression=False,downscale_factor=1):
+		W='utf-8';V='C_CONTIGUOUS';U='raw';P=downscale_factor;O=do_compression;M='!i';A=image
+		if not K(A,B.ndarray):
+			a=importlib.util.find_spec('torch')
+			if a is not G:
 				import torch
-				if H(A)==torch.Tensor:
-					if I(A,'detach'):A=A.detach()
-					if I(A,'cpu'):A=A.cpu()
-					if I(A,'numpy'):A=A.numpy()
-		if H(A)!=B.ndarray:raise K('image should be np.ndarray')
-		R=A.shape;S=A.dtype
-		while E(A.shape)>3:A=A[0,...]
-		if E(A.shape)==2:A=A[None,...]
-		if A.shape[-1]>4:A=A.transpose(1,2,0)
-		if A.shape[-1]>4:raise K('image dimension not valid shape: '+str(R))
-		if M!=1:A=P(A,M)
-		T=importlib.util.find_spec('cv2')
-		if B.issubdtype(S,B.integer)and T is not None:import cv2;W,U=cv2.imencode('.png',A[:,:,::-1]);J=U.tobytes();D['compression']='png'
-		else:
-			if(A.dtype==B.float32 or A.dtype==B.float64)and float_to_half:A=A.astype(B.float16)
-			if not A.data.c_contiguous:A=A.copy()
-			J=zlib.compress(A.data);D['compression']='zlib'
-		D['nbytes']=A.nbytes;D['shape']=A.shape;D['dtype']=A.dtype.name;V=json.dumps(D);N=name.encode('utf-8');O=V.encode('utf-8')
-		with F.socket(F.AF_INET,F.SOCK_STREAM)as C:C.connect((L.host,L.port));C.send(G('!i',E(N)));C.send(G('!i',E(O)));C.send(G('!i',E(J)));C.send(N);C.send(O);C.sendall(J);C.close()
+				if K(A,torch.Tensor):
+					if N(A,'detach'):A=A.detach()
+					if N(A,'cpu'):A=A.cpu()
+					A=A.numpy()
+		if not K(A,B.ndarray):raise E('image should be np.ndarray')
+		A=Z(A);b=tuple(A.shape)
+		if P!=1:A=X(A,P)
+		if A.shape[2]>4:raise E('image channel must be <= 4, got shape: '+str(b))
+		if O and A.dtype in(B.float32,B.float64)and float_to_half:A=A.astype(B.float16)
+		c=importlib.util.find_spec('cv2');H=U;F=G
+		if O:
+			if B.issubdtype(A.dtype,B.integer)and c is not G:
+				import cv2;Q=A
+				if A.shape[2]==3:Q=A[:,:,::-1]
+				d,e=cv2.imencode('.png',Q)
+				if not d:raise E('cv2.imencode(.png) failed')
+				F=e.tobytes();H='png'
+			else:
+				if not A.flags[V]:A=A.copy()
+				F=zlib.compress(A.tobytes());H='zlib'
+		if F is G:
+			if not A.flags[V]:A=A.copy()
+			F=A.tobytes();H=U
+		f=A.nbytes;g,h,i=A.shape;j=Y(A.dtype);k=H.encode(W);R=b''.join([D('!Q',f),D('!III',g,h,i),D('!I',j),k]);S=name.encode(W);l=L(S);m=L(R);T=L(F)
+		with J.socket(J.AF_INET,J.SOCK_STREAM)as C:C.connect((I.host,I.port));print(f"sending image {name} to {I.host}:{I.port}, payload={T/1024:.1f} KB, comp={H}");C.sendall(D(M,l));C.sendall(D(M,m));C.sendall(D(M,T));C.sendall(S);C.sendall(R);C.sendall(F);C.close()
 `;
 
-const pythonCodeBuilder = (evaluateName: string, host: string, port: number, floatToHalf: boolean, downscale: number) => {
+const pythonCodeBuilder = (evaluateName: string, host: string, port: number, floatToHalf: boolean, doCompression: boolean, downscale: number) => {
     const evaluateNameEscape = evaluateName.replaceAll('\'', '\\\'').replaceAll('\"', '\\\"');
     const floatToHalfStr = floatToHalf ? "True" : "False";
+    const doCompressionStr = doCompression ? "True" : "False";
     const downscaleStr = downscale.toString();
 
     return `
 ${pythonCode}
 
-EdolView(host='${host}', port=${port}).send_image('${evaluateNameEscape}', ${evaluateName}, ${floatToHalfStr}, ${downscaleStr})
+EdolView(host='${host}', port=${port}).send_image('${evaluateNameEscape}', ${evaluateName}, ${floatToHalfStr}, ${doCompressionStr}, ${downscaleStr})
     `;
 };
 

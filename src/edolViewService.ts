@@ -85,9 +85,10 @@ export class EdolViewImageHandler{
             const host: string = vscode.workspace.getConfiguration().get("edolview.host") ?? "127.0.0.1";
             const port: number = vscode.workspace.getConfiguration().get("edolview.port") ?? 21734;
             const floatToHalf: boolean = vscode.workspace.getConfiguration().get("edolview.float_to_half") ?? false;
+            const doCompression: boolean = vscode.workspace.getConfiguration().get("edolview.do_compression") ?? false;
             const downscale: number = vscode.workspace.getConfiguration().get("edolview.downscale") ?? 1;
             
-            const pythonCode = pythonCodeBuilder(variable.evaluateName, host, port, floatToHalf, downscale);
+            const pythonCode = pythonCodeBuilder(variable.evaluateName, host, port, floatToHalf, doCompression, downscale);
 
             await session.customRequest("evaluate", { expression: pythonCode, frameId: callStack, context: 'repl' });
         }
