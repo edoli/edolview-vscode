@@ -21,8 +21,8 @@ export class EdolViewImageHandler{
     }
 
     private serializeExtra(extra: Extra): Buffer {
-        // Serialize Extra struct to binary format
-        // u64 nbytes (8 bytes) + u32 dtype (4 bytes) + [u32; 3] shape (12 bytes) + String compression (length + data)
+        // Serialize Extra struct to binary format:
+        // u64 nbytes (8 bytes) + [u32; 3] shape (12 bytes) + u32 dtype (4 bytes) + compression bytes.
         
         const compressionBuffer = Buffer.from(extra.compression, 'utf-8');
         const compressionLength = compressionBuffer.length;
@@ -35,16 +35,16 @@ export class EdolViewImageHandler{
         buffer.writeBigUInt64BE(BigInt(extra.nbytes), offset);
         offset += 8;
         
-        // Write dtype as u32 (4 bytes)
-        buffer.writeUInt32BE(extra.dtype, offset);
-        offset += 4;
-        
         // Write shape as [u32; 3] (12 bytes total)
         buffer.writeUInt32BE(extra.shape[0], offset);
         offset += 4;
         buffer.writeUInt32BE(extra.shape[1], offset);
         offset += 4;
         buffer.writeUInt32BE(extra.shape[2], offset);
+        offset += 4;
+
+        // Write dtype as u32 (4 bytes)
+        buffer.writeUInt32BE(extra.dtype, offset);
         offset += 4;
         
         // Write compression string data
