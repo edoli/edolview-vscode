@@ -1,1 +1,1 @@
-# edolview-vscode
+# Edolview VS Code Extension

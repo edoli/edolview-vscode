@@ -1,11 +1,11 @@
 {
   "name": "edolview",
-  "displayName": "edolview",
-  "description": "vscode extension for edolview",
+  "displayName": "Edolview",
+  "description": "VS Code extension for Edolview",
   "icon": "icon.png",
   "version": "0.0.7",
   "publisher": "edolview-vscode",
-  "repository": "https://github.com/edoli/edolview",
+  "repository": "https://github.com/edoli/edolview-vscode",
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -20,15 +20,15 @@
     "commands": [
       {
         "command": "edolview.image.file",
-        "title": "Send Image to EdolView"
+        "title": "Send Image to Edolview"
       },
       {
         "command": "edolview.image.python",
-        "title": "Send Image to EdolView"
+        "title": "Send Image to Edolview"
       },
       {
         "command": "edolview.image.cpp",
-        "title": "Send Image to EdolView"
+        "title": "Send Image to Edolview"
       }
     ],
     "configuration": {
@@ -65,25 +65,25 @@
       "explorer/context": [
         {
           "command": "edolview.image.file",
-          "group": "EdolView"
+          "group": "Edolview"
         }
       ],
       "editor/title/context": [
         {
           "command": "edolview.image.file",
-          "group": "EdolView"
+          "group": "Edolview"
         }
       ],
       "debug/variables/context": [
         {
           "when": "resourceLangId == python",
           "command": "edolview.image.python",
-          "group": "EdolView"
+          "group": "Edolview"
         },
         {
           "when": "resourceLangId == cpp",
           "command": "edolview.image.cpp",
-          "group": "EdolView"
+          "group": "Edolview"
         }
       ]
     }
